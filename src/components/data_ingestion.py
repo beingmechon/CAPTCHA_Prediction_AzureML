@@ -32,11 +32,9 @@ class DataIngestion:
             logging.info("Test Data Path: %s" % test_path)
 
             split_data(self.raw_data_path, train_path, test_path)
-            logging.info(f"""Data ingestion and split completed.
-                         Total file in train set: {count_files(train_path)}
-                         Total file in test set: {count_files(test_path)}""")
+            logging.info(f"Data ingestion and split completed. Total file in train set: {count_files(train_path)}. Total file in test set: {count_files(test_path)}")
             
-            return (train_path, test_path)
+            return train_path, test_path
             
         except Exception as e:
             raise CustomException(e, sys)

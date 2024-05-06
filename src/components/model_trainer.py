@@ -19,7 +19,7 @@ from src.logger import logging
 
 @dataclass
 class ModelTrainerConfig:
-    trained_model_file: str = os.path.join("artifacts", "model.pkl")
+    trained_model_file: str = os.path.join("artifacts", "model.pth")
     images_path: str = os.path.join("artifacts", "images")
     device: torch.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 

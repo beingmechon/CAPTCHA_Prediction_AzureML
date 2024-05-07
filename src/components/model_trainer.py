@@ -96,31 +96,35 @@ class ModelTrainer:
         except Exception as e:
             logging.error(f"Error occurred during training: {str(e)}")
             raise CustomException("Error occurred during training", sys)
+        
+        return self.model
 
     def save_model(self):
         torch.save(self.model, self.config.trained_model_file)
 
 if __name__ == '__main__':
-    RAW_DATA = "./data/raw_data"
+    RAW_DATA = os.path.join("data", "raw_data")
     HIDDEN_SIZE = 256
     EPOCHS = 1
     LR = 0.001
     WEIGHT_DECAY = 1e-3
     CLIP_NORM = 5
+    BATCH_SIZE = 32
+    DROP_OUTS = 0.1
 
     char_to_idx, _= get_dicts(RAW_DATA)
     num_chars = len(char_to_idx)
 
     # Initiate data ingestion
-    data_ingestion = DataIngestion(os.path.join("data", "raw_data"))
+    data_ingestion = DataIngestion(RAW_DATA)
     train_path, test_path = data_ingestion.initiate_data_ingestion()
     
     # Initiate data loader
-    loader = LoadData(train_path, test_path)
+    loader = LoadData(train_path, test_path, batch_size=BATCH_SIZE)
     train_loader, _ = loader.initiate_data_loader()
 
     # Create model object
-    crnn = CRNN(num_chars, rnn_hidden_size=HIDDEN_SIZE)
+    crnn = CRNN(num_chars, rnn_hidden_size=HIDDEN_SIZE, dropout=DROP_OUTS)
     crnn.apply(weights_init)
 
     # Create optimizer and scheduler
@@ -135,5 +139,5 @@ if __name__ == '__main__':
                            raw_data_path=RAW_DATA, 
                            epochs=EPOCHS, 
                            clip_norm=CLIP_NORM)
-    trainer.initiate_model_trainer()
+    model = trainer.initiate_model_trainer()
     trainer.save_model()

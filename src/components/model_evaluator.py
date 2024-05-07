@@ -2,9 +2,11 @@ import os
 import sys
 import torch
 import pandas as pd
+import numpy as np
 from tqdm import tqdm
 from dataclasses import dataclass
-from sklearn.metrics import accuracy_score
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_curve, auc
+import matplotlib.pyplot as plt
 
 from src.logger import logging
 from src.components.model import CRNN
@@ -18,6 +20,8 @@ from src.components.data_loader import LoadData
 class ModelEvaluatorConfig:
     trained_model_file: str = os.path.join("artifacts", "model.pth")
     device: torch.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    images_path: str = os.path.join("artifacts", "images")
+
 
 class ModelEvaluation:
     def __init__(self, data_loader, raw_data_path) -> None:
@@ -35,24 +39,37 @@ class ModelEvaluation:
                 for image_batch, text_batch in tqdm(self.data_loader, desc="Evaluation Progress", leave=True):
                     text_batch_logits = self.model(image_batch.to(self.config.device))
                     text_batch_pred = decode_predictions(text_batch_logits.cpu(), self.idx_to_char)
-                    df = pd.DataFrame({'actual': text_batch, 'prediction': text_batch_pred})
-                    self.results_test = pd.concat([self.results_test, df], ignore_index=True)
+
+                df = pd.DataFrame({'actual': text_batch, 'prediction': text_batch_pred})
+                
+                self.results_test = pd.concat([self.results_test, df], ignore_index=True)
 
             self.results_test['prediction_corrected'] = self.results_test['prediction'].apply(correct_prediction)
             logging.info("Model evaluation completed.")
             
-            return self.results_test
+            # return self.results_test
         
         except Exception as e:
             logging.error(f"Error occurred during model evaluation: {e}")
             raise CustomException(f"Error occurred during model evaluation {e}", sys)
 
-    def get_accuracy(self):
+    def get_metrics(self):
         if 'prediction_corrected' not in self.results_test.columns:
             logging.warning("Corrected predictions not found. Initiating model evaluation.")
             self.initiate_model_evaluater()
+        
+        logging.info("Calculating metrics for model evaluation...")
+        actual = self.results_test['actual']
+        predicted = self.results_test['prediction_corrected']
+        
+        accuracy = accuracy_score(actual, predicted)
+        precision = precision_score(actual, predicted, average='weighted')
+        recall = recall_score(actual, predicted, average='weighted')
+        f1 = f1_score(actual, predicted, average='weighted')
 
-        return accuracy_score(self.results_test['actual'], self.results_test['prediction_corrected'])
+        logging.info({'accuracy': accuracy, 'precision': precision, 'recall': recall, 'f1': f1})
+        
+        return {'accuracy': accuracy, 'precision': precision, 'recall': recall, 'f1': f1}
 
 
 if __name__ == '__main__':
@@ -66,4 +83,7 @@ if __name__ == '__main__':
 
     modelEvaluater = ModelEvaluation(test_loader, raw_data_path=RAW_DATA)
     modelEvaluater.initiate_model_evaluater()
-    print(modelEvaluater.get_accuracy())
+    metrics = modelEvaluater.get_metrics()
+    
+    print("Metrics:")
+    print(metrics)

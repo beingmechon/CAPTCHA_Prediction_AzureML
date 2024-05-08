@@ -4,11 +4,14 @@ import mlflow
 import torch.optim as optim
 import mlflow.pytorch as mlflow_pt
 
-from src.utils import get_dicts
-from src.components.data_loader import LoadData
-from src.components.model import CRNN, weights_init
-from src.components.model_trainer import ModelTrainer
-from src.components.data_ingestion import DataIngestion
+import sys
+sys.path.append('./')
+
+from utils import get_dicts
+from components.data_loader import LoadData
+from components.model import CRNN, weights_init
+from components.model_trainer import ModelTrainer
+from components.data_ingestion import DataIngestion
 
 def main():
     parser = argparse.ArgumentParser()

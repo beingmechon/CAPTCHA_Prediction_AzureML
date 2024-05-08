@@ -2,10 +2,10 @@ import argparse
 import mlflow
 import mlflow.pytorch as mlflow_pt
 
-from src.utils import decode_predictions, correct_prediction, get_dicts
-from src.components.data_ingestion import DataIngestion
-from src.components.data_loader import LoadData
-from src.components.model_evaluator import ModelEvaluation
+from utils import decode_predictions, correct_prediction, get_dicts
+from components.data_ingestion import DataIngestion
+from components.data_loader import LoadData
+from components.model_evaluator import ModelEvaluation
 
 
 def log_parameters(args):

@@ -1,13 +1,15 @@
 import os
 import sys
 
+sys.path.append('./')
+
 from PIL import Image
 from torchvision import transforms
 from torch.utils.data import Dataset, DataLoader
 
-from src.logger import logging
-from src.exception import CustomException
-from src.components.data_ingestion import DataIngestion
+from logger import logging
+from exception import CustomException
+from components.data_ingestion import DataIngestion
 
 
 class CAPTCHADataset(Dataset):

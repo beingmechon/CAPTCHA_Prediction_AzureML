@@ -4,13 +4,17 @@ import torch
 import shutil
 import random
 
+import sys
+sys.path.append('./')
+
+
 import torch.nn.functional as F
-from src.logger import logging
+from logger import logging
 
 # Set random seed for reproducibility
 RANDOM_SEED = 42
 
-def split_data(source_folder, train_folder, val_folder, split_ratio=0.8, random_seed=RANDOM_SEED):
+def split_data(source_folder, train_folder, val_folder, split_ratio, random_seed=RANDOM_SEED):
     random.seed(random_seed)
     torch.manual_seed(random_seed)
 

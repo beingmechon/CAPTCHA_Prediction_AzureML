@@ -1,13 +1,18 @@
 import os
 import sys
-from src.exception import CustomException
-from src.logger import logging
-from torch.utils.data import DataLoader, Dataset
-from torchvision import transforms
-from PIL import Image
 from dataclasses import dataclass
 
-from src.utils import split_data, count_files
+sys.path.append('./')
+
+from logger import logging
+from exception import CustomException
+from utils import split_data, count_files
+
+
+from PIL import Image
+from torchvision import transforms
+from torch.utils.data import DataLoader, Dataset
+
 
 @dataclass
 class DataIngestionConfig:

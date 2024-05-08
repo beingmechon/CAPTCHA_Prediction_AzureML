@@ -2,6 +2,8 @@ import os
 import sys
 from dataclasses import dataclass
 
+sys.path.append('./')
+
 import torch
 import numpy as np
 import torch.nn as nn
@@ -9,12 +11,12 @@ import torch.optim as optim
 import matplotlib.pyplot as plt
 
 from tqdm import tqdm
-from src.components.model import CRNN, weights_init
-from src.utils import get_dicts, compute_loss
-from src.components.data_loader import LoadData
-from src.components.data_ingestion import DataIngestion
-from src.exception import CustomException
-from src.logger import logging
+from components.model import CRNN, weights_init
+from utils import get_dicts, compute_loss
+from components.data_loader import LoadData
+from components.data_ingestion import DataIngestion
+from exception import CustomException
+from logger import logging
 
 
 @dataclass
@@ -25,7 +27,7 @@ class ModelTrainerConfig:
 
 
 class ModelTrainer:
-    def __init__(self, model, train_loader, optimizer, lr_scheduler, raw_data_path, clip_norm=5, epochs=100):
+    def __init__(self, model, train_loader, optimizer, lr_scheduler, raw_data_path, clip_norm, epochs):
         self.model = model
         self.train_loader = train_loader
         self.optimizer = optimizer

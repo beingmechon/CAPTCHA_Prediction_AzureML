@@ -1,145 +1,124 @@
-import os
 import sys
-from dataclasses import dataclass
-
-sys.path.append('./')
-
 import torch
-import numpy as np
-import torch.nn as nn
-import torch.optim as optim
-import matplotlib.pyplot as plt
-
+import mlflow
 from tqdm import tqdm
-from components.model import CRNN, weights_init
+from torch import nn, optim
+import matplotlib.pyplot as plt
+import mlflow.pytorch as mlflow_pt
+
+
+sys.path.append("../")
+
+from logger import logging
+from exception import CustomException
 from utils import get_dicts, compute_loss
 from components.data_loader import LoadData
+from components.model import CRNN, weights_init
 from components.data_ingestion import DataIngestion
-from exception import CustomException
-from logger import logging
 
 
-@dataclass
-class ModelTrainerConfig:
-    trained_model_file: str = os.path.join("artifacts", "model.pth")
-    images_path: str = os.path.join("artifacts", "images")
-    device: torch.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+class Trainer:
+    def __init__(self, args):
+        self.args = args
 
-
-class ModelTrainer:
-    def __init__(self, model, train_loader, optimizer, lr_scheduler, raw_data_path, clip_norm, epochs):
-        self.model = model
-        self.train_loader = train_loader
-        self.optimizer = optimizer
-        self.lr_scheduler = lr_scheduler
-        self.epochs = epochs
-        self.clip_norm = clip_norm
-        self.char_to_idx, _ = get_dicts(raw_data_path=raw_data_path)
-        self.config = ModelTrainerConfig()
-
-    def initiate_model_trainer(self):
-        logging.info("Model trainer initiated with total number of epochs: %d" % self.epochs)
-
+    def train(self):        
+        for arg, value in vars(self.args).items():
+            mlflow.log_param(arg, value)
+        
+        char_to_idx, _ = get_dicts(self.args.data)
+        num_chars = len(char_to_idx)
+        
+        data_ingestion = DataIngestion(self.args.data, random_seed=self.args.random_seed, split_ratio=self.args.split_ratio)
+        train_path, test_path = data_ingestion.initiate_data_ingestion()
+        
+        loader = LoadData(train_path, test_path, batch_size=self.args.batch_size)
+        train_loader, _ = loader.initiate_data_loader()
+        
+        crnn = CRNN(num_chars, rnn_hidden_size=self.args.hidden_size, dropout=self.args.drop_out)
+        crnn.apply(weights_init)
+        
+        optimizer = optim.Adam(crnn.parameters(), lr=self.args.learning_rate, weight_decay=self.args.weight_decay)
+        lr_scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=self.args.patience)
+        
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        crnn = crnn.to(device)
+        criterion = nn.CTCLoss(blank=0)
+        
         epoch_losses = []
         iteration_losses = []
+        val_losses = []
         num_updates_epochs = []
-        self.model = self.model.to(self.config.device)
-
+        
         try:
-            for epoch in tqdm(range(1, self.epochs+1), desc="Epochs"):
+            for epoch in tqdm(range(1, self.args.epochs+1), desc="Epochs"):
                 epoch_loss_list = [] 
+                val_loss_list = []
                 num_updates_epoch = 0
                 
-                for image_batch, text_batch in tqdm(self.train_loader, desc="Batches", leave=False):
-                    self.optimizer.zero_grad()
-                    text_batch_logits = self.model(image_batch.to(self.config.device))
-                    loss = compute_loss(text_batch, text_batch_logits, self.config.device, criterion=nn.CTCLoss(blank=0), char_to_idx=self.char_to_idx)
+                for image_batch, text_batch in tqdm(train_loader, desc="Batches", leave=False):
+                    crnn.train()
+                    text_batch_logits = crnn(image_batch.to(device))
+                    loss = compute_loss(text_batch, text_batch_logits, device, criterion, char_to_idx)
                     iteration_loss = loss.item()
+                    optimizer.zero_grad()
 
-                    if np.isnan(iteration_loss) or np.isinf(iteration_loss):
+                    if not torch.isfinite(loss):
                         continue
-                    
+
                     num_updates_epoch += 1
                     iteration_losses.append(iteration_loss)
                     epoch_loss_list.append(iteration_loss)
+
                     loss.backward()
-                    nn.utils.clip_grad_norm_(self.model.parameters(), self.clip_norm)
-                    self.optimizer.step()
+                    nn.utils.clip_grad_norm_(crnn.parameters(), self.args.clip_norm)
+                    optimizer.step()
 
-                    logging.info(f"Epoch: {epoch} | Batch Loss: {iteration_loss}")
+                    crnn.eval()
+                    with torch.no_grad():
+                        text_batch_logits = crnn(image_batch)
+                        eval_loss = compute_loss(text_batch, text_batch_logits, device, criterion, char_to_idx)
+                        iteration_val_loss = eval_loss.item()
+                        val_loss_list.append(iteration_val_loss)
+                    
+                    mlflow.log_metric("Batch Loss", iteration_loss)
 
-                epoch_loss = np.mean(epoch_loss_list)
-                logging.info(f"Epoch: {epoch} | Loss: {epoch_loss} | NumUpdates: {num_updates_epoch}")
-                epoch_losses.append(epoch_loss)
-                num_updates_epochs.append(num_updates_epoch)
-                
-                if self.lr_scheduler:
-                    self.lr_scheduler.step(epoch_loss)
-                    current_lr = self.lr_scheduler.get_last_lr()[0]
-                    logging.info("Current learning rate: {}".format(current_lr))
+                    epoch_loss = torch.tensor(epoch_loss_list).mean().item()
+                    val_loss = torch.tensor(val_loss_list).mean().item()
 
-                # Plot and save the graph
-                fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 5))
+                    mlflow.log_metric("Epoch Loss", epoch_loss)
+                    mlflow.log_metric("Validation Loss", val_loss)
+                    mlflow.log_metric("Num Updates", num_updates_epoch)
 
-                ax1.plot(epoch_losses)
-                ax1.set_xlabel("Epochs")
-                ax1.set_ylabel("Loss")
+                    epoch_losses.append(epoch_loss)
+                    val_losses.append(val_loss)
+                    num_updates_epochs.append(num_updates_epoch)
+                    
+                    if lr_scheduler:
+                        lr_scheduler.step(epoch_loss)
 
-                ax2.plot(iteration_losses)
-                ax2.set_xlabel("Iterations")
-                ax2.set_ylabel("Loss")
+            fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(10, 5))
 
-                if not os.path.exists(self.config.images_path):
-                    os.makedirs(self.config.images_path)
+            ax1.plot(epoch_losses)
+            ax1.set_xlabel("Epochs")
+            ax1.set_ylabel("Loss")
+            ax1.set_title("Epochs vs Losses")
 
-                fig.savefig(os.path.join(self.config.images_path, "Loss.png"))
-                plt.show()
+            ax2.plot(iteration_losses)
+            ax2.set_xlabel("Iterations")
+            ax2.set_ylabel("Loss")
+            ax2.set_title("Iterations vs Loss")
+
+            ax3.plot(val_losses)
+            ax3.set_xlabel("Epochs")
+            ax3.set_ylabel("Validation Loss")
+            ax3.set_title("Epochs vs Validation Loss")
+
+            mlflow.log_figure(fig, "Losses.png")
 
         except Exception as e:
             logging.error(f"Error occurred during training: {str(e)}")
             raise CustomException("Error occurred during training", sys)
-        
-        return self.model
 
-    def save_model(self):
-        torch.save(self.model, self.config.trained_model_file)
+        mlflow_pt.log_model(crnn, "model")
+        # mlflow.end_run()
 
-if __name__ == '__main__':
-    RAW_DATA = os.path.join("data", "raw_data")
-    HIDDEN_SIZE = 256
-    EPOCHS = 1
-    LR = 0.001
-    WEIGHT_DECAY = 1e-3
-    CLIP_NORM = 5
-    BATCH_SIZE = 32
-    DROP_OUTS = 0.1
-
-    char_to_idx, _= get_dicts(RAW_DATA)
-    num_chars = len(char_to_idx)
-
-    # Initiate data ingestion
-    data_ingestion = DataIngestion(RAW_DATA)
-    train_path, test_path = data_ingestion.initiate_data_ingestion()
-    
-    # Initiate data loader
-    loader = LoadData(train_path, test_path, batch_size=BATCH_SIZE)
-    train_loader, _ = loader.initiate_data_loader()
-
-    # Create model object
-    crnn = CRNN(num_chars, rnn_hidden_size=HIDDEN_SIZE, dropout=DROP_OUTS)
-    crnn.apply(weights_init)
-
-    # Create optimizer and scheduler
-    optimizer = optim.Adam(crnn.parameters(), lr=LR, weight_decay=WEIGHT_DECAY)
-    lr_scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=5)
-    
-    # Initiate model trainer and save the model
-    trainer = ModelTrainer(model=crnn, 
-                           train_loader=train_loader, 
-                           optimizer=optimizer, 
-                           lr_scheduler=lr_scheduler, 
-                           raw_data_path=RAW_DATA, 
-                           epochs=EPOCHS, 
-                           clip_norm=CLIP_NORM)
-    model = trainer.initiate_model_trainer()
-    trainer.save_model()

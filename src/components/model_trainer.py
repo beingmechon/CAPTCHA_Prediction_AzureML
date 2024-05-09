@@ -5,9 +5,10 @@ from tqdm import tqdm
 from torch import nn, optim
 import matplotlib.pyplot as plt
 import mlflow.pytorch as mlflow_pt
+from mlflow.models import infer_signature
 
-
-sys.path.append("../")
+# sys.path.append("../")
+sys.path.append("./")
 
 from logger import logging
 from exception import CustomException
@@ -118,7 +119,12 @@ class Trainer:
         except Exception as e:
             logging.error(f"Error occurred during training: {str(e)}")
             raise CustomException("Error occurred during training", sys)
+        
+        # Signature
+        # signature = infer_signature(train_loader)
 
-        mlflow_pt.log_model(crnn, "model")
+        model_info = mlflow_pt.log_model(crnn, "model") #, signature=signature)
         # mlflow.end_run()
+
+        return model_info
 

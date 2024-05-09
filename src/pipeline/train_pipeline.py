@@ -4,13 +4,15 @@ import argparse
 import mlflow
 import mlflow.pytorch as mlflow_pt
 
-sys.path.append("../")
+# sys.path.append("../")
+sys.path.append("./")
+
 from components.model_trainer import Trainer
 
 def main():
 
     mlflow.start_run()
-    mlflow.set_registry_uri("http://127.0.0.1:5000")
+    # mlflow.set_registry_uri("http://127.0.0.1:5000")
     print(mlflow.get_registry_uri())
     mlflow_pt.autolog()
 
@@ -31,7 +33,8 @@ def main():
     args = parser.parse_args()
 
     trainer = Trainer(args)
-    trainer.train()
+    model_info = trainer.train()
+    print(model_info.model_uri)
     
     mlflow.end_run()
 

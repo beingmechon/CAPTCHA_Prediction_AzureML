@@ -53,7 +53,7 @@ class Trainer:
         try:
             for epoch in tqdm(range(1, self.args.epochs+1), desc="Epochs"):
                 epoch_loss_list = [] 
-                val_loss_list = []
+                val_epoch_loss_list = []
                 num_updates_epoch = 0
                 
                 for image_batch, text_batch in tqdm(train_loader, desc="Batches", leave=False):
@@ -77,25 +77,28 @@ class Trainer:
                     crnn.eval()
                     with torch.no_grad():
                         text_batch_logits = crnn(image_batch)
-                        eval_loss = compute_loss(text_batch, text_batch_logits, device, criterion, char_to_idx)
-                        iteration_val_loss = eval_loss.item()
-                        val_loss_list.append(iteration_val_loss)
+                        val_loss = compute_loss(text_batch, text_batch_logits, device, criterion, char_to_idx)
+                        iteration_val_loss = val_loss.item()
+                        val_epoch_loss_list.append(iteration_val_loss)
                     
                     mlflow.log_metric("Batch Loss", iteration_loss)
 
-                    epoch_loss = torch.tensor(epoch_loss_list).mean().item()
-                    val_loss = torch.tensor(val_loss_list).mean().item()
+                epoch_loss = torch.tensor(epoch_loss_list).mean().item()
+                val_loss = torch.tensor(val_epoch_loss_list).mean().item()
 
-                    mlflow.log_metric("Epoch Loss", epoch_loss)
-                    mlflow.log_metric("Validation Loss", val_loss)
-                    mlflow.log_metric("Num Updates", num_updates_epoch)
+                mlflow.log_metric("Epoch Loss", epoch_loss)
+                mlflow.log_metric("Validation Loss", val_loss)
+                mlflow.log_metric("Num Updates", num_updates_epoch)
 
-                    epoch_losses.append(epoch_loss)
-                    val_losses.append(val_loss)
-                    num_updates_epochs.append(num_updates_epoch)
-                    
-                    if lr_scheduler:
-                        lr_scheduler.step(epoch_loss)
+                epoch_losses.append(epoch_loss)
+                val_losses.append(val_loss)
+                num_updates_epochs.append(num_updates_epoch)
+                
+                if lr_scheduler:
+                    lr_scheduler.step(epoch_loss)
+                    current_lr = lr_scheduler.get_last_lr()[0]
+                    print("Current learning rate: {}".format(current_lr))
+                    # mlflow.log_metric("current_lr", current_lr)
 
             fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(10, 5))
 

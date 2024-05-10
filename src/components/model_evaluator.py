@@ -57,6 +57,9 @@ class Evaluator():
 
             results_test['prediction_corrected'] = results_test['prediction'].apply(correct_prediction)
 
+            results_test.to_csv('results_test.csv')
+            mlflow.log_artifact('results_test.csv')
+
         except Exception as e:
             logging.error(f"Error occurred during training: {str(e)}")
             raise CustomException("Error occurred during training", sys)
@@ -71,8 +74,8 @@ class Evaluator():
         predicted = results_test['prediction_corrected']
         
         accuracy = accuracy_score(actual, predicted)
-        precision = precision_score(actual, predicted, average='weighted', zero_division=1)
-        recall = recall_score(actual, predicted, average='weighted', zero_division=1)
+        precision = precision_score(actual, predicted, average='weighted')#, zero_division=1)
+        recall = recall_score(actual, predicted, average='weighted')#, zero_division=1)
         f1 = f1_score(actual, predicted, average='weighted')
 
         # mlflow.log_params({'accuracy': accuracy, 'precision': precision, 'recall': recall, 'f1': f1})

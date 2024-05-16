@@ -6,13 +6,14 @@ from torch import nn, optim
 import matplotlib.pyplot as plt
 import mlflow.pytorch as mlflow_pt
 from mlflow.models import infer_signature
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 
 # sys.path.append("../")
 sys.path.append("./")
 
 from logger import logging
 from exception import CustomException
-from utils import get_dicts, compute_loss
+from utils import get_dicts, compute_loss, decode_predictions
 from components.data_loader import LoadData
 from components.model import CRNN, weights_init
 from components.data_ingestion import DataIngestion
@@ -26,7 +27,7 @@ class Trainer:
         for arg, value in vars(self.args).items():
             mlflow.log_param(arg, value)
         
-        char_to_idx, _ = get_dicts(self.args.data)
+        char_to_idx, idx_to_char = get_dicts(self.args.data)
         num_chars = len(char_to_idx)
         
         data_ingestion = DataIngestion(self.args.data, random_seed=self.args.random_seed, split_ratio=self.args.split_ratio)
@@ -77,10 +78,22 @@ class Trainer:
                     crnn.eval()
                     with torch.no_grad():
                         text_batch_logits = crnn(image_batch)
+                        text_batch_pred = decode_predictions(text_batch_logits.cpu(), idx_to_char)
+
                         val_loss = compute_loss(text_batch, text_batch_logits, device, criterion, char_to_idx)
                         iteration_val_loss = val_loss.item()
                         val_epoch_loss_list.append(iteration_val_loss)
-                    
+
+
+                    accuracy = accuracy_score(text_batch, text_batch_pred)
+                    precision = precision_score(text_batch, text_batch_pred, average='weighted')
+                    recall = recall_score(text_batch, text_batch_pred, average='weighted')
+                    f1 = f1_score(text_batch, text_batch_pred, average='weighted')
+
+                    mlflow.log_metric("Accuracy", accuracy)
+                    mlflow.log_metric("Precision", precision)
+                    mlflow.log_metric("Recall", recall)
+                    mlflow.log_metric("F1-Score", f1)
                     mlflow.log_metric("Batch Loss", iteration_loss)
 
                 epoch_loss = torch.tensor(epoch_loss_list).mean().item()
